@@ -1,6 +1,11 @@
 import open3d as o3d
 import copy
 import numpy as np
+import glob
+
+pcloud_path = "point_clouds/"
+path = pcloud_path + "pcloud_%d.ply"
+mesh_f_name = "meshes/my_mesh_name.obj"
 
 
 def draw_registration_result(source, target, transformation):
@@ -9,7 +14,7 @@ def draw_registration_result(source, target, transformation):
     source_temp.paint_uniform_color([1, 0.706, 0])
     target_temp.paint_uniform_color([0, 0.651, 0.929])
     source_temp.transform(transformation)
-    # o3d.visualization.draw_geometries([source_temp, target_temp])
+    o3d.visualization.draw_geometries([source_temp, target_temp])
 
 
 def pairwise_registration(source, target):
@@ -67,23 +72,24 @@ def main(num1=-1, num=1, matrix=None):
     threshold = 0.02
 
     if num1 == -1:
-        image1_pcd = o3d.io.read_point_cloud("dog/point_main.ply")
+        image1_pcd = o3d.io.read_point_cloud("point_clouds/point_main.ply")
     else:
-        image1_pcd = o3d.io.read_point_cloud("dog/point%d.ply" % num1)
-    image2_pcd = o3d.io.read_point_cloud("dog/point%d.ply" % num)
+        image1_pcd = o3d.io.read_point_cloud(path % num1)
+    image2_pcd = o3d.io.read_point_cloud(path % num)
 
+    # todo consider this
     # # homogeneous matrix of first point cloud
-    # transformation_initial = np.asarray([[-0.999984, -0.00399195, 0.00400795, 1.365],
-    #                                      [0.00399195, -0.999984, 0.00400795, -2.092],
-    #                                      [-0.00400795, 0.00399195, 0.999984, -1.63],
-    #                                      [0., 0., 0., 1.]])
+    transformation_initial = np.asarray([[-0.999984, -0.00399195, 0.00400795, 1.365],
+                                         [0.00399195, -0.999984, 0.00400795, -2.092],
+                                         [-0.00400795, 0.00399195, 0.999984, -1.63],
+                                         [0., 0., 0., 1.]])
     #
-    transformation_initial = np.asarray([
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1],
-    ])
+    # transformation_initial = np.asarray([
+    #     [1, 0, 0, 0],
+    #     [0, 1, 0, 0],
+    #     [0, 0, 1, 0],
+    #     [0, 0, 0, 1],
+    # ])
 
     if matrix.all() != None:
         transformation_initial = matrix
@@ -110,7 +116,7 @@ def main(num1=-1, num=1, matrix=None):
     print(registered_images)
     print("[INFO] Transformation Matrix:")
     print(registered_images.transformation)
-    draw_registration_result(image1_pcd, image2_pcd, registered_images.transformation)
+    # draw_registration_result(image1_pcd, image2_pcd, registered_images.transformation)
 
     # Merge Point Clouds
 
@@ -134,10 +140,10 @@ def main(num1=-1, num=1, matrix=None):
 
 
 def calc_rot_matrix(angle):
-    c = np.cos(angle * np.pi/180)
-    c = np.cos(0 * np.pi/180)
-    s = np.sin(angle * np.pi/180)
-    s = np.sin(0 * np.pi/180)
+    c = np.cos(angle * np.pi / 180)
+    c = np.cos(0 * np.pi / 180)
+    s = np.sin(angle * np.pi / 180)
+    s = np.sin(0 * np.pi / 180)
 
     return np.asarray([
         [1, 0, 0, 0],
@@ -147,33 +153,19 @@ def calc_rot_matrix(angle):
     ])
 
 
-if __name__ == '__main__':
-    pcd = o3d.io.read_point_cloud("dog/point10.ply")
-    o3d.io.write_point_cloud("dog/point_main.ply", pcd)
+def single_merge(files):
+    pcd = o3d.io.read_point_cloud(files[0])
+    for i in range(len(files) - 1):
+        print(files[i])
+        pcd += o3d.io.read_point_cloud(files[i])
+    o3d.visualization.draw_geometries([pcd])
+    return pcd
 
-    # pcds = []
-    # for i in pcls:
-    #     pcds.append(o3d.io.read_point_cloud(f"dog/point{i}.ply"))
-    # o3d.visualization.draw_geometries(pcds)
 
-    # pcd = o3d.io.read_point_cloud("dog/point0.ply")
-    # for i in range(1, 4, 1):
-    # for i in [1, 2, 3, 4]:
-    # # for i in range( 34, 1, -2):
-    # #     if i in [1, 2, 4]:
-    # #         continue
-    #     pcd += o3d.io.read_point_cloud("dog/point%d.ply" % i)
-    #     pcd = main(-1, i, calc_rot_matrix(i * 10))
-    #     o3d.io.write_point_cloud("dog/point_main.ply", pcd)
-    # o3d.visualization.draw_geometries([pcd])
-    # # o3d.visualization.draw_geometries([pcd1, pcd2])
-
-    # pcd = o3d.io.read_point_cloud("dog/point10.ply")
-    # radii = [.2, .1, .2, .4]
-    # rec_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
-    #     pcd, o3d.utility.DoubleVector(radii))
-    # o3d.visualization.draw_geometries([rec_mesh])
-
+def build_mesh(pcd):
+    '''
+    Accept PointCloud > return Mesh
+    '''
     tetra_mesh, pt_map = o3d.geometry.TetraMesh.create_from_point_cloud(pcd)
     for alpha in np.logspace(np.log10(1.1), np.log10(0.01), num=1):
         print(f"alpha={alpha:.3f}")
@@ -181,31 +173,45 @@ if __name__ == '__main__':
             pcd, alpha, tetra_mesh, pt_map)
         mesh.compute_vertex_normals()
         o3d.visualization.draw_geometries([mesh], mesh_show_back_face=True)
-    #     input("Press enter to continue: ")
+    return mesh
 
-    o3d.io.write_triangle_mesh("mu_mesh.obj", mesh)
-    # import open3d as o3d
-    # import trimesh
-    # import numpy as np
 
-    # # pcd = o3d.io.read_point_cloud("pointcloud.ply")
-    # pcd.estimate_normals()
-    #
-    # # estimate radius for rolling ball
-    # distances = pcd.compute_nearest_neighbor_distance()
-    # avg_dist = np.mean(distances)
-    # radius = 1.5 * avg_dist
-    #
-    # mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
-    #     pcd,
-    #     o3d.utility.DoubleVector([radius, radius * 2]))
-    #
-    # # create the triangular mesh with the vertices and faces from open3d
-    # tri_mesh = trimesh.Trimesh(np.asarray(mesh.vertices), np.asarray(mesh.triangles),
-    #                            vertex_normals=np.asarray(mesh.vertex_normals))
-    #
-    # trimesh.convex.is_convex(tri_mesh)
-    #
-    # # files = [1, 2, 3, 4, 5]
-    # # for i in range(len(files) - 1):
-    # #     comb = main(files[i], files[i+1])
+def optimized_merge(files):
+    pcd = o3d.io.read_point_cloud(files[0])
+    for i in range(len(files) - 1):
+        print(files[i])
+        pcd = main(-1, i, calc_rot_matrix(i * 10))
+        o3d.io.write_point_cloud("dog/point_main.ply", pcd)
+    o3d.visualization.draw_geometries([pcd])
+    return pcd
+
+
+if __name__ == '__main__':
+    files = glob.glob(pcloud_path + "*.ply")
+    if len(files) < 1:
+        import pcloud_generator as pg
+
+        from_path = "images/cup/*.jpg"
+        pg.process_pairwise_pclouds(from_path)
+        files = glob.glob(pcloud_path + "*.ply")
+    if len(files) < 1:
+        raise FileNotFoundError("Please, specify correct path to point clouds e.g. <pclouds/*.pcl> ")
+    for item in files:
+        if "point_main" in item:
+            files.remove(item)
+            break
+
+    pcd = o3d.io.read_point_cloud(path % 0)
+    o3d.io.write_point_cloud("point_clouds/point_main.ply", pcd)
+
+    # single_merge(files)
+    optimized_merge(files)
+
+    mesh = build_mesh(pcd)
+    o3d.io.write_triangle_mesh(mesh_f_name, mesh)
+
+    # pcd = o3d.io.read_point_cloud("dog/point10.ply")
+    # radii = [.2, .1, .2, .4]
+    # rec_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+    #     pcd, o3d.utility.DoubleVector(radii))
+    # o3d.visualization.draw_geometries([rec_mesh])
